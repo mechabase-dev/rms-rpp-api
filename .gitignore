@@ -1,0 +1,31 @@
+# 環境変数ファイル
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 一時ファイル
+temp_downloads/
+*.csv
+*.zip
+screenshots/
+
+# OS
+.DS_Store
+Thumbs.db
+

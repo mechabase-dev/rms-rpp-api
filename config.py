@@ -4,7 +4,17 @@
 """
 import json
 import os
+from pathlib import Path
 from typing import Dict
+
+# .envファイルの読み込み（存在する場合）
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+except ImportError:
+    pass  # python-dotenvがインストールされていない場合はスキップ
 
 
 def get_rms_credentials() -> Dict[str, str]:
