@@ -48,6 +48,88 @@ cd api
 python main.py
 ```
 
+## Dockerでの実行
+
+### Docker Composeを使用（推奨）
+
+#### 方法1: .envファイルを使用（推奨）
+
+1. `.env`ファイルを作成して認証情報を設定：
+
+```bash
+cp .env.example .env
+# .envファイルを編集して認証情報を入力
+```
+
+2. Docker Composeで起動：
+
+```bash
+docker-compose up -d
+```
+
+#### 方法2: docker-compose.ymlに直接環境変数を設定
+
+1. `docker-compose.yml`の`environment`セクションのコメントを外して、実際の値を設定：
+
+```yaml
+environment:
+  RMS_LOGIN_ID: "your_rms_login_id"
+  RMS_PASSWORD: "your_rms_password"
+  RAKUTEN_USER_ID: "your_rakuten_user_id"
+  RAKUTEN_PASSWORD: "your_rakuten_password"
+```
+
+2. Docker Composeで起動：
+
+```bash
+docker-compose up -d
+```
+
+3. ログを確認：
+
+```bash
+docker-compose logs -f
+```
+
+4. 停止：
+
+```bash
+docker-compose down
+```
+
+### Dockerコマンドで直接実行
+
+1. イメージをビルド：
+
+```bash
+docker build -t rms-rpp-api .
+```
+
+2. コンテナを起動：
+
+```bash
+docker run -d \
+  --name rms-rpp-api \
+  -p 8000:8000 \
+  --env-file .env \
+  --shm-size=2gb \
+  --security-opt seccomp=unconfined \
+  rms-rpp-api
+```
+
+3. ログを確認：
+
+```bash
+docker logs -f rms-rpp-api
+```
+
+4. 停止：
+
+```bash
+docker stop rms-rpp-api
+docker rm rms-rpp-api
+```
+
 ## エンドポイント
 
 ### GET /rpp-report

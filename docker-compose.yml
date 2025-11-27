@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  rms-rpp-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rms-rpp-api
+    ports:
+      - "8000:8000"
+    environment:
+      # 方法1: 環境変数を直接設定する場合
+      # 以下のコメントを外して、実際の値を設定してください
+      # RMS_LOGIN_ID: "your_rms_login_id"
+      # RMS_PASSWORD: "your_rms_password"
+      # RAKUTEN_USER_ID: "your_rakuten_user_id"
+      # RAKUTEN_PASSWORD: "your_rakuten_password"
+      
+      # 方法2: ホストの環境変数から読み込む場合
+      # RMS_LOGIN_ID: ${RMS_LOGIN_ID}
+      # RMS_PASSWORD: ${RMS_PASSWORD}
+      # RAKUTEN_USER_ID: ${RAKUTEN_USER_ID}
+      # RAKUTEN_PASSWORD: ${RAKUTEN_PASSWORD}
+      
+      # 方法3: JSON形式で設定する場合
+      # RMS_CREDENTIALS: '{"login_id": "your_rms_login_id", "password": "your_rms_password"}'
+      # RAKUTEN_CREDENTIALS: '{"user_id": "your_rakuten_user_id", "password": "your_rakuten_password"}'
+    env_file:
+      # .envファイルから環境変数を読み込む場合（推奨）
+      # .envファイルを作成して認証情報を設定してください
+      - .env
+    volumes:
+      # 開発時にコードをマウントする場合（本番環境では削除）
+      # - .:/app
+    restart: unless-stopped
+    # Playwright用のセキュリティ設定
+    security_opt:
+      - seccomp:unconfined
+    shm_size: 2gb
+
