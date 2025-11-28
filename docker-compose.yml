@@ -25,6 +25,24 @@ services:
       # 方法3: JSON形式で設定する場合
       # RMS_CREDENTIALS: '{"login_id": "your_rms_login_id", "password": "your_rms_password"}'
       # RAKUTEN_CREDENTIALS: '{"user_id": "your_rakuten_user_id", "password": "your_rakuten_password"}'
+      
+      # OAuth2設定（必須）
+      # SECRET_KEY: "your-secret-key-change-this-in-production"
+      # ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      # 
+      # OAuth2クライアント設定（Client Credentialsフロー用、n8n推奨）
+      # OAUTH_CLIENT_ID: "n8n"
+      # OAUTH_CLIENT_SECRET: "n8n-secret"
+      # OAUTH_CLIENT_SCOPE: "read"
+      # または複数クライアント:
+      # OAUTH_CLIENTS: '[{"client_id":"n8n","client_secret":"n8n-secret","scope":"read"}]'
+      #
+      # OAuth2ユーザー設定（Password Credentialsフロー用、オプション）
+      # OAUTH_USERNAME: "admin"
+      # OAUTH_PASSWORD: "your_password"
+      # OAUTH_EMAIL: "admin@example.com"
+      # または複数ユーザー:
+      # USERS: '[{"username":"admin","password":"your_password","email":"admin@example.com"}]'
     env_file:
       # .envファイルから環境変数を読み込む場合（推奨）
       # .envファイルを作成して認証情報を設定してください
