@@ -352,9 +352,25 @@ async def get_rpp_report_csv(
                 csv_content = b""  # 空のCSVファイル
             else:
                 logger.info(f"CSVファイルを返します: {csv_file_path}")
-                # CSVファイルを読み込む
-                with open(csv_file_path, 'rb') as f:
-                    csv_content = f.read()
+                # CSVファイルをShift_JISからUTF-8に変換して読み込む
+                try:
+                    with open(csv_file_path, 'r', encoding='shift_jis', errors='replace') as f:
+                        lines = f.readlines()
+                    
+                    # 最初の6行を削除（メタ情報と注意書き）
+                    if len(lines) > 6:
+                        lines = lines[6:]
+                        logger.info("CSVファイルの最初の6行（メタ情報）を削除しました")
+                    
+                    # 行を結合してUTF-8にエンコード（BOMなし）
+                    csv_text = ''.join(lines)
+                    csv_content = csv_text.encode('utf-8')
+                    logger.info("CSVファイルをShift_JISからUTF-8に変換しました")
+                except UnicodeDecodeError:
+                    # Shift_JISで読み込めない場合は、元のファイルをそのまま返す
+                    logger.warning("Shift_JISとして読み込めませんでした。元のエンコーディングで返します")
+                    with open(csv_file_path, 'rb') as f:
+                        csv_content = f.read()
             
             # バックグラウンドタスクで一時ディレクトリを削除
             background_tasks.add_task(cleanup_temp_directory, temp_dir)
