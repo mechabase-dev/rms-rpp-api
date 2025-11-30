@@ -343,20 +343,18 @@ async def get_rpp_report_csv(
                 headless=True
             )
             
-            if not csv_file_path or not os.path.exists(csv_file_path):
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"指定された日付 ({date}) のレポートが見つかりませんでした。"
-                )
-            
             # ファイル名を生成
             filename = f"rpp_report_{date}.csv"
             
-            logger.info(f"CSVファイルを返します: {csv_file_path}")
-            
-            # CSVファイルを読み込む
-            with open(csv_file_path, 'rb') as f:
-                csv_content = f.read()
+            # 対象データがない場合は空のCSVファイルを返す
+            if not csv_file_path or not os.path.exists(csv_file_path):
+                logger.info(f"指定された日付 ({date}) のレポートにデータがありません。空のCSVファイルを返します。")
+                csv_content = b""  # 空のCSVファイル
+            else:
+                logger.info(f"CSVファイルを返します: {csv_file_path}")
+                # CSVファイルを読み込む
+                with open(csv_file_path, 'rb') as f:
+                    csv_content = f.read()
             
             # バックグラウンドタスクで一時ディレクトリを削除
             background_tasks.add_task(cleanup_temp_directory, temp_dir)

@@ -324,8 +324,9 @@ async def navigate_to_rpp_top(
                 
                 target_row_index = None
                 all_rows_no_data = False
+                found_no_data_row = False  # 指定日付で「対象データがありません」が見つかったか
 
-                while elapsed_time < max_wait_time and target_row_index is None:
+                while elapsed_time < max_wait_time and target_row_index is None and not found_no_data_row:
                     try:
                         # 更新ボタンをクリック（JavaScriptを使用）
                         await page.evaluate('''() => {
@@ -339,33 +340,33 @@ async def navigate_to_rpp_top(
                         status_text = await page.locator(status_selector).text_content()
                         logger.info(f"最新行のステータス: {status_text.strip() if status_text else 'N/A'}")
 
-                        download_rows = page.locator('table.table tbody tr')
-                        row_count = await download_rows.count()
-                        no_data_rows = True
-                        for idx in range(row_count):
-                            row_status = (await download_rows.nth(idx).locator('td:nth-child(2) div.cell-content').text_content() or "").strip()
-                            download_cell = download_rows.nth(idx).locator('td:nth-child(3)')
-                            download_text = (await download_cell.text_content() or "").strip()
-                            action_locator = download_cell.locator('a:has-text("ダウンロード"), button:has-text("ダウンロード"), a[value="ダウンロード"]')
-                            action_count = await action_locator.count()
-                            has_action = action_count > 0
-                            logger.info(f"[Row {idx+1}] ステータス: {row_status}, ダウンロードセル: {download_text}, アクション有無: {has_action} (要素数: {action_count})")
-
-                            if has_action:
-                                no_data_rows = False
-
-                            if row_status == "完了":
-                                # 完了行にダウンロードリンク/ボタンが表示されるまで待機
+                        # 1行目（最新行）のみをチェック（指定日付のレポートは常に1行目に来る）
+                        first_row = page.locator('table.table tbody tr:first-child')
+                        row_status = (await first_row.locator('td:nth-child(2) div.cell-content').text_content() or "").strip()
+                        download_cell = first_row.locator('td:nth-child(3)')
+                        download_text = (await download_cell.text_content() or "").strip()
+                        
+                        logger.info(f"[1行目] ステータス: {row_status}, ダウンロードセル: {download_text}")
+                        
+                        # ステータスが「完了」の場合
+                        if row_status == "完了":
+                            # ダウンロードセルの内容を確認
+                            if download_text == "対象データがありません":
+                                logger.info("1行目のレポートは対象データがありません。")
+                                found_no_data_row = True
+                                target_row_index = None  # 対象データがないことを示す
+                            else:
+                                # ダウンロードリンク/ボタンが表示されるまで待機
                                 try:
                                     await download_cell.locator('a:has-text("ダウンロード"), button:has-text("ダウンロード")').wait_for(state="visible", timeout=5000)
-                                    no_data_rows = False
-                                    target_row_index = idx
-                                    logger.info(f"リンク付き完了行を検出しました: {idx + 1} 行目")
-                                    break
+                                    target_row_index = 0  # 1行目 = インデックス0
+                                    logger.info("1行目にダウンロードリンクを検出しました。")
                                 except PlaywrightTimeoutError:
-                                    logger.info(f"[Row {idx+1}] は完了だがリンク表示を待機中にタイムアウト。再試行します。")
-                                    continue
-                        all_rows_no_data = no_data_rows
+                                    logger.info("1行目は完了だがリンク表示を待機中にタイムアウト。再試行します。")
+                                    target_row_index = None
+                        else:
+                            # まだ完了していない
+                            target_row_index = None
                     except Exception as e:
                         logger.warning(f"ステータスの確認中にエラーが発生しました: {str(e)}")
                     
@@ -374,7 +375,11 @@ async def navigate_to_rpp_top(
                     logger.info(f"ステータス待機中... {elapsed_time}秒経過")
                 
                 if target_row_index is None:
-                    if all_rows_no_data:
+                    if found_no_data_row:
+                        # 指定日付で「対象データがありません」が見つかった場合
+                        logger.info("指定日付のレポートは対象データがありません。")
+                        return None
+                    elif all_rows_no_data:
                         logger.info("すべての履歴行が『対象データがありません』のため、ダウンロード処理をスキップします。")
                         return None
                     error_msg = "完了状態のダウンロードリンクがタイムアウトまでに見つかりませんでした。"
@@ -383,8 +388,8 @@ async def navigate_to_rpp_top(
                         await page.screenshot(path=screenshot_dir / f"error_status_timeout_{int(time.time())}.png")
                     raise TimeoutError(error_msg)
                 
-                logger.info(f"ダウンロード対象行: {target_row_index + 1} 行目のリンクをクリックします。")
-                download_cell = download_rows.nth(target_row_index).locator('td:nth-child(3)')
+                logger.info(f"ダウンロード対象行: 1行目のリンクをクリックします。")
+                download_cell = first_row.locator('td:nth-child(3)')
                 download_cell_text = (await download_cell.text_content() or "").strip()
                 logger.info(f"ダウンロードセルの内容: {download_cell_text}")
                 download_action_locator = download_cell.locator('a:has-text("ダウンロード"), button:has-text("ダウンロード")')
