@@ -10,11 +10,66 @@ from typing import Dict
 # .envファイルの読み込み（存在する場合）
 try:
     from dotenv import load_dotenv
-    env_path = Path(__file__).parent / '.env'
-    if env_path.exists():
-        load_dotenv(env_path)
+    import sys
+    import os
+    
+    # .envファイルを探す（複数の場所をチェック）
+    env_paths = []
+    
+    # 実行ファイルの場合と通常のPython実行の場合でパスを調整
+    if getattr(sys, 'frozen', False):
+        # Nuitkaでコンパイルされた実行ファイルの場合
+        executable_path = Path(sys.executable)
+        
+        # ワンファイルモードの場合、一時ディレクトリではなく元の実行ファイルの場所を探す
+        # sys.executableは一時ディレクトリ内のパスになるため、元のパスを取得
+        if hasattr(sys, '_MEIPASS'):
+            # PyInstallerの場合
+            base_path = Path(sys.executable).parent
+        else:
+            # Nuitkaの場合
+            # 実行ファイルの実際のパスを取得（シンボリックリンクを解決）
+            try:
+                real_executable = os.path.realpath(sys.executable)
+                base_path = Path(real_executable).parent
+            except:
+                base_path = Path(sys.executable).parent
+    else:
+        # 通常のPython実行の場合
+        base_path = Path(__file__).parent
+    
+    # .envファイルを探す場所のリスト
+    env_paths = [
+        base_path / '.env',  # 実行ファイル/スクリプトと同じディレクトリ
+        base_path.parent / '.env',  # 親ディレクトリ（プロジェクトルート）
+        Path.cwd() / '.env',  # カレントディレクトリ（実行時の作業ディレクトリ）
+    ]
+    
+    # ワンファイルモードの場合、元の実行ファイルの場所も追加でチェック
+    if getattr(sys, 'frozen', False) and not hasattr(sys, '_MEIPASS'):
+        # Nuitkaワンファイルモードの場合、環境変数から元のパスを取得
+        original_executable = os.environ.get('NUITKA_ORIGINAL_EXECUTABLE')
+        if original_executable:
+            env_paths.insert(0, Path(original_executable).parent / '.env')
+    
+    # カレントディレクトリを最優先でチェック（実行時の作業ディレクトリ）
+    # これにより、cd dist && ./rms-rpp-api のように実行した場合に dist/.env を読み込める
+    cwd_env = Path.cwd() / '.env'
+    if cwd_env.exists() and cwd_env.is_file():
+        load_dotenv(cwd_env, override=True)
+    else:
+        # .envファイルを読み込む（最初に見つかったものを使用）
+        for env_path in env_paths:
+            if env_path.exists() and env_path.is_file():
+                load_dotenv(env_path, override=True)
+                break
 except ImportError:
     pass  # python-dotenvがインストールされていない場合はスキップ
+except Exception as e:
+    # エラーが発生しても処理を続行（環境変数が直接設定されている場合もあるため）
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.debug(f".envファイルの読み込み中にエラーが発生しました: {str(e)}")
 
 
 def get_rms_credentials() -> Dict[str, str]:

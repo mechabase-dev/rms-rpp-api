@@ -1,0 +1,77 @@
+# Nuitkaでコンパイルしたアプリケーション用のDockerfile
+# マルチステージビルドでソースコードを非公開にしたDockerイメージを作成
+
+# ============================================
+# ステージ1: ビルドステージ（コンパイル用）
+# ============================================
+FROM mcr.microsoft.com/playwright/python:v1.39.0-jammy AS builder
+
+WORKDIR /app
+
+# ビルドツールをインストール（Nuitka用）
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    patchelf \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pythonの依存関係をコピー
+COPY requirements.txt .
+
+# 依存関係をインストール（Nuitkaを含む）
+RUN pip install --no-cache-dir -r requirements.txt
+
+# アプリケーションコードをコピー
+COPY . .
+
+# Nuitkaでコンパイル
+# Playwrightのパスを取得してデータファイルを含める
+RUN PLAYWRIGHT_PATH=$(python3 -c "import playwright; import os; print(os.path.dirname(playwright.__file__))") && \
+    nuitka \
+    --standalone \
+    --onefile \
+    --enable-plugin=anti-bloat \
+    --include-module=uvicorn \
+    --include-module=fastapi \
+    --include-module=starlette \
+    --include-module=pydantic \
+    --include-module=playwright \
+    --include-module=playwright.async_api \
+    --include-module=playwright._impl \
+    --include-data-file=$PLAYWRIGHT_PATH/driver/playwright.sh=playwright/driver/playwright.sh \
+    --include-module=dotenv \
+    --include-module=jose \
+    --include-package=passlib \
+    --include-module=passlib.handlers \
+    --include-module=passlib.handlers.bcrypt \
+    --include-module=cryptography \
+    --include-module=bcrypt \
+    --nofollow-import-to=test \
+    --nofollow-import-to=tests \
+    --nofollow-import-to=pytest \
+    --output-dir=dist \
+    --output-filename=rms-rpp-api \
+    main.py
+
+# ============================================
+# ステージ2: 実行ステージ（軽量なランタイム）
+# ============================================
+FROM mcr.microsoft.com/playwright/python:v1.39.0-jammy
+
+WORKDIR /app
+
+# Playwrightのブラウザのみインストール（ビルドツールは不要）
+RUN playwright install chromium
+RUN playwright install-deps chromium
+
+# コンパイル済みの実行ファイルをビルドステージからコピー
+COPY --from=builder /app/dist/rms-rpp-api /app/rms-rpp-api
+
+# 実行権限を付与
+RUN chmod +x /app/rms-rpp-api
+
+# ポート8000を公開
+EXPOSE 8000
+
+# コンパイル済みの実行ファイルを実行
+CMD ["./rms-rpp-api"]
