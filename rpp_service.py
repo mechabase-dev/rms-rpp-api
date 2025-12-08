@@ -10,12 +10,84 @@ import time
 import zipfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
 logger = logging.getLogger(__name__)
+
+REPORT_TYPES: Dict[str, Dict[str, str]] = {
+    "rpp": {
+        "slug": "rpp",
+        "label": "RPP",
+        "top_path": "top",
+        "nav_selector": '#root > div > div.rpp-header > div:nth-child(2) > nav > div > div.rpp-nav > nav > ul > li:nth-child(6) > a > div',
+        "report_radio_selector": "#rdReportTypeItem",
+        "start_placeholder": "Select start",
+        "end_placeholder": "Select end",
+        "download_button_selectors": [
+            'button:has-text("全商品レポートダウンロード")',
+            'button:has-text("ダウンロード")'
+        ],
+        "history_link_text": "ダウンロード履歴",
+    },
+    "rppexp": {
+        "slug": "rppexp",
+        "label": "RPP-EXP",
+        "top_path": "top",
+        "nav_selector": '#root > div > div.rpp-header > div:nth-child(2) > nav > div > div.rpp-nav > nav > ul > li:nth-child(6) > a > div',
+        "report_radio_selector": "#rdReportTypeItem",
+        "start_placeholder": "Select start",
+        "end_placeholder": "Select end",
+        "download_button_selectors": [
+            'button:has-text("全商品レポートダウンロード")',
+            'button:has-text("ダウンロード")'
+        ],
+        "history_link_text": "ダウンロード履歴",
+    },
+    "rpp-exp": {"alias": "rppexp"},
+    "cpnadv": {
+        "slug": "cpnadv",
+        "label": "クーポンアドバンス",
+        "top_path": "top",
+        "download_button_selectors": [
+            'button:has-text("ダウンロード")',
+            'a:has-text("ダウンロード")'
+        ],
+        "history_link_text": "ダウンロード履歴",
+    },
+    "tda": {
+        "slug": "tda",
+        "label": "TDA",
+        "top_path": "top",
+        "download_button_selectors": [
+            'button:has-text("ダウンロード")',
+            'a:has-text("ダウンロード")'
+        ],
+        "history_link_text": "ダウンロード履歴",
+    },
+    "tdaexp": {
+        "slug": "tdaexp",
+        "label": "TDA-EXP",
+        "top_path": "top",
+        "download_button_selectors": [
+            'button:has-text("ダウンロード")',
+            'a:has-text("ダウンロード")'
+        ],
+        "history_link_text": "ダウンロード履歴",
+    },
+    "cpa": {
+        "slug": "cpa",
+        "label": "楽天CPA",
+        "top_path": "reports",
+        "download_button_selectors": [
+            'button:has-text("ダウンロード")',
+            'a:has-text("ダウンロード")'
+        ],
+        "history_link_text": "ダウンロード履歴",
+    },
+}
 
 
 async def login_to_rms(
@@ -170,11 +242,25 @@ async def login_to_rms(
         raise
 
 
+def _resolve_report_type(report_type: str) -> Dict[str, str]:
+    """
+    指定されたレポート種別を正規化して返す
+    """
+    key = (report_type or "rpp").lower()
+    resolved = REPORT_TYPES.get(key)
+    if resolved and "alias" in resolved:
+        resolved = REPORT_TYPES.get(resolved["alias"])
+    if not resolved:
+        raise ValueError(f"サポートされていないレポート種別です: {report_type}. 利用可能: {', '.join(sorted(set(REPORT_TYPES.keys())))}")
+    return resolved
+
+
 async def navigate_to_rpp_top(
     page,
     screenshot_dir: Optional[Path] = None,
     download_dir: str = "temp_downloads",
-    target_date: Optional[date] = None
+    target_date: Optional[date] = None,
+    report_type: str = "rpp"
 ) -> Optional[str]:
     """
     RPPトップページに遷移し、最新のレポートをダウンロードする。
@@ -188,14 +274,17 @@ async def navigate_to_rpp_top(
     Returns:
         Optional[str]: ダウンロードしたZIPファイルのパス。対象データがなければNone。
     """
+    report_info = _resolve_report_type(report_type)
+    base_slug = report_info["slug"]
+
     try:
         # ダウンロードディレクトリの作成
         download_path = Path(download_dir)
         download_path.mkdir(parents=True, exist_ok=True)
         
         # RPPトップページに移動
-        logger.info("RPPトップページに移動します...")
-        await page.goto("https://ad.rms.rakuten.co.jp/rpp/top", timeout=30000)
+        logger.info(f"{report_info['label']}トップページに移動します...")
+        await page.goto(f"https://ad.rms.rakuten.co.jp/{base_slug}/top", timeout=30000)
         await page.wait_for_load_state('networkidle', timeout=30000)
         await asyncio.sleep(2)
         
@@ -203,7 +292,7 @@ async def navigate_to_rpp_top(
         if not await page.locator('body').is_visible():
             raise Exception("RPPトップページが正しく読み込まれませんでした。")
         
-        logger.info("RPPトップページに正常に移動しました。")
+        logger.info(f"{report_info['label']}トップページに正常に移動しました。")
         
         # ナビゲーションメニューの要素をクリック
         logger.info("ナビゲーションメニューから指定の要素をクリックします...")
@@ -440,7 +529,178 @@ async def navigate_to_rpp_top(
         raise
 
 
-async def extract_zip_file(zip_file_path: str, extract_dir: str = "temp_downloads") -> str:
+async def navigate_to_report_top(
+    page,
+    screenshot_dir: Optional[Path] = None,
+    download_dir: str = "temp_downloads",
+    target_date: Optional[date] = None,
+    report_type: str = "rpp"
+) -> Optional[str]:
+    """
+    汎用: 指定種別のトップに遷移し、レポートをダウンロードする。
+    RPP系以外はセレクタが不明なため、ダウンロード/履歴リンクは
+    テキストベースのフォールバックで試行する。
+    """
+    report_info = _resolve_report_type(report_type)
+    base_slug = report_info["slug"]
+    top_path = report_info.get("top_path", "top").lstrip("/")
+    nav_selector = report_info.get("nav_selector")
+    report_radio_selector = report_info.get("report_radio_selector")
+    start_placeholder = report_info.get("start_placeholder")
+    end_placeholder = report_info.get("end_placeholder")
+    download_button_selectors = report_info.get("download_button_selectors") or [
+        'button:has-text("全商品レポートダウンロード")',
+        'button:has-text("ダウンロード")',
+        'a:has-text("ダウンロード")'
+    ]
+    history_link_text = report_info.get("history_link_text", "ダウンロード履歴")
+
+    download_path = Path(download_dir)
+    download_path.mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"{report_info['label']}トップページに移動します...")
+    await page.goto(f"https://ad.rms.rakuten.co.jp/{base_slug}/{top_path}", timeout=30000)
+    await page.wait_for_load_state('networkidle', timeout=30000)
+    await asyncio.sleep(2)
+
+    if not await page.locator('body').is_visible():
+        raise Exception(f"{report_info['label']}トップページが正しく読み込まれませんでした。")
+
+    # ナビゲーション（存在する場合のみ）
+    if nav_selector:
+        try:
+            await page.locator(nav_selector).wait_for(state="visible", timeout=20000)
+            await page.locator(nav_selector).click()
+            await page.wait_for_load_state('networkidle', timeout=30000)
+            await asyncio.sleep(2)
+        except Exception as e:
+            logger.warning(f"ナビゲーションクリックに失敗しましたが続行します: {str(e)}")
+
+    # レポート種別ラジオ（任意）
+    if report_radio_selector:
+        try:
+            await page.evaluate(f'''() => {{
+                const radio = document.querySelector('{report_radio_selector}');
+                if (radio) {{
+                    radio.click();
+                    radio.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    radio.dispatchEvent(new MouseEvent('click', {{ bubbles: true }}));
+                }}
+            }}''')
+            await asyncio.sleep(1)
+        except Exception as e:
+            logger.warning(f"レポート種別選択に失敗しましたが続行します: {str(e)}")
+
+    # 日付入力（プレースホルダがある場合のみ）
+    if start_placeholder and end_placeholder:
+        if target_date:
+            start_date = target_date
+            end_date = target_date
+        else:
+            jst = timezone(timedelta(hours=+9))
+            today = datetime.now(jst).date()
+            end_date = today - timedelta(days=1)
+            start_date = end_date
+        start_date_str = start_date.strftime('%Y-%m-%d')
+        end_date_str = end_date.strftime('%Y-%m-%d')
+        try:
+            await page.get_by_role("textbox", name=start_placeholder).click()
+            await page.get_by_role("textbox", name=start_placeholder).fill(start_date_str)
+            await page.get_by_role("textbox", name=start_placeholder).press("Enter")
+            await asyncio.sleep(1)
+            await page.get_by_role("textbox", name=end_placeholder).click()
+            await page.get_by_role("textbox", name=end_placeholder).fill(end_date_str)
+            await page.get_by_role("textbox", name=end_placeholder).press("Enter")
+            await asyncio.sleep(1)
+        except Exception as e:
+            logger.warning(f"日付入力に失敗しましたが続行します: {str(e)}")
+
+    # ダウンロード開始
+    clicked = False
+    for selector in download_button_selectors:
+        try:
+            await page.locator(selector).click(timeout=5000)
+            await asyncio.sleep(1)
+            clicked = True
+            break
+        except Exception:
+            continue
+    if not clicked:
+        logger.warning("ダウンロードボタンをクリックできませんでした。")
+
+    # 履歴ページへ
+    try:
+        await page.evaluate(f'''() => {{
+            const historyLink = Array.from(document.querySelectorAll('a, button')).find(link => link.textContent && link.textContent.includes('{history_link_text}'));
+            if (historyLink) {{
+                historyLink.click();
+                historyLink.dispatchEvent(new MouseEvent('click', {{ bubbles: true }}));
+            }}
+        }}''')
+        await asyncio.sleep(2)
+    except Exception as e:
+        logger.warning(f"ダウンロード履歴リンクに遷移できませんでしたが続行します: {str(e)}")
+
+    # 完了待ち
+    status_selector = 'table.table tbody tr:first-child td:nth-child(2) div.cell-content'
+    max_wait_time = 300
+    check_interval = 5
+    elapsed_time = 0
+    target_row_index = None
+    found_no_data_row = False
+
+    while elapsed_time < max_wait_time and target_row_index is None and not found_no_data_row:
+        try:
+            await page.evaluate('''() => {
+                const refreshButton = document.querySelector('#btnDownloadHistoryRefresh');
+                if (refreshButton) {
+                    refreshButton.click();
+                    refreshButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+                }
+            }''')
+            await asyncio.sleep(2)
+
+            first_row = page.locator('table.table tbody tr:first-child')
+            row_status = (await first_row.locator('td:nth-child(2) div.cell-content').text_content() or "").strip()
+            download_cell = first_row.locator('td:nth-child(3)')
+            download_text = (await download_cell.text_content() or "").strip()
+
+            if row_status == "完了":
+                if download_text == "対象データがありません":
+                    found_no_data_row = True
+                    target_row_index = None
+                else:
+                    try:
+                        await download_cell.locator('a:has-text("ダウンロード"), button:has-text("ダウンロード")').wait_for(state="visible", timeout=5000)
+                        target_row_index = 0
+                    except PlaywrightTimeoutError:
+                        target_row_index = None
+            else:
+                target_row_index = None
+        except Exception as e:
+            logger.warning(f"ステータス確認中にエラー: {str(e)}")
+
+        await asyncio.sleep(check_interval)
+        elapsed_time += check_interval
+
+    if target_row_index is None:
+        if found_no_data_row:
+            return None
+        raise TimeoutError("完了状態のダウンロードリンクが見つかりませんでした。")
+
+    download_cell = page.locator('table.table tbody tr:first-child td:nth-child(3)')
+    download_action_locator = download_cell.locator('a:has-text("ダウンロード"), button:has-text("ダウンロード")')
+    if await download_action_locator.count() == 0:
+        logger.warning("完了行にクリック可能な要素が見つかりません。")
+        return None
+    download_action = download_action_locator.first
+    async with page.expect_download() as download_info:
+        await download_action.click()
+        download = await download_info.value
+        await download.save_as(download_path / download.suggested_filename)
+        return str(download_path / download.suggested_filename)
+
+async def extract_zip_file(zip_file_path: str, extract_dir: str = "temp_downloads", report_slug: str = "rpp") -> str:
     """
     ZIPファイルを展開する
     
@@ -467,12 +727,13 @@ async def extract_zip_file(zip_file_path: str, extract_dir: str = "temp_download
         if not extracted_files:
             raise Exception("ZIPファイル内にCSVファイルが見つかりませんでした。")
         
-        # RPPレポートのCSVファイルを特定
-        rpp_csv_files = [f for f in extracted_files if 'rpp' in f.name.lower()]
-        if not rpp_csv_files:
-            raise Exception("RPPレポートのCSVファイルが見つかりませんでした。")
+        # 対象レポートのCSVファイルを特定
+        target_csv_files = [f for f in extracted_files if report_slug in f.name.lower()]
+        if not target_csv_files:
+            logger.warning("レポート種別名を含むCSVが見つからなかったため、最初のCSVを使用します。")
+            target_csv_files = extracted_files
         
-        csv_file_path = str(rpp_csv_files[0])
+        csv_file_path = str(target_csv_files[0])
         logger.info(f"ZIPファイルを展開しました: {csv_file_path}")
         
         # 元のZIPファイルを削除
@@ -491,10 +752,11 @@ async def get_rpp_report_csv(
     rakuten_credentials: dict,
     target_date: Optional[date] = None,
     download_dir: str = "temp_downloads",
-    headless: bool = True
+    headless: bool = True,
+    report_type: str = "rpp"
 ) -> Optional[str]:
     """
-    楽天RMSからRPPレポートをダウンロードしてCSVファイルを取得する
+    楽天RMSから指定種別のレポートをダウンロードしてCSVファイルを取得する
     
     Args:
         rms_credentials (dict): RMSの認証情報
@@ -502,10 +764,13 @@ async def get_rpp_report_csv(
         target_date (Optional[date]): 取得するレポートの日付（指定しない場合は昨日）
         download_dir (str): ダウンロード先ディレクトリ
         headless (bool): ブラウザをヘッドレスモードで実行するかどうか
+        report_type (str): 取得するレポート種別（rpp / rpp-exp / rppexp / cpnadv / tda / tdaexp / cpa）
     
     Returns:
         Optional[str]: CSVファイルのパス。取得できない場合はNone。
     """
+    report_info = _resolve_report_type(report_type)
+    report_slug = report_info["slug"]
     p = await async_playwright().start()
     browser = None
     context = None
@@ -541,15 +806,15 @@ async def get_rpp_report_csv(
         # 共通ログイン処理を実行
         await login_to_rms(page, rms_credentials, rakuten_credentials, screenshot_dir)
         
-        # RPPトップページに遷移
-        zip_file_path = await navigate_to_rpp_top(page, screenshot_dir, download_dir, target_date)
+        # 指定種別トップページに遷移しダウンロード
+        zip_file_path = await navigate_to_report_top(page, screenshot_dir, download_dir, target_date, report_type=report_type)
 
         if not zip_file_path:
             logger.info("ダウンロード対象がなかったためZIP展開処理をスキップします。")
             return None
         
         # ZIPファイルを展開
-        csv_file_path = await extract_zip_file(zip_file_path, download_dir)
+        csv_file_path = await extract_zip_file(zip_file_path, download_dir, report_slug)
         
         return csv_file_path
         

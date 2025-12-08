@@ -294,6 +294,11 @@ async def get_rpp_report_csv(
         description="取得するレポートの日付 (YYYY-MM-DD形式)",
         example="2024-01-01"
     ),
+    report_type: str = Query(
+        "rpp",
+        description="取得するレポート種別。rpp または rpp-exp",
+        example="rpp-exp"
+    ),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -302,6 +307,7 @@ async def get_rpp_report_csv(
     
     Args:
         date: 取得するレポートの日付 (YYYY-MM-DD形式)
+        report_type: 取得するレポート種別（rpp / rpp-exp / rppexp / cpnadv / tda / tdaexp / cpa）
         current_user: 現在の認証済みユーザー
     
     Returns:
@@ -317,7 +323,7 @@ async def get_rpp_report_csv(
                 detail=f"無効な日付形式です。YYYY-MM-DD形式で指定してください。例: 2024-01-01"
             )
         
-        logger.info(f"RPPレポート取得リクエスト: 日付={target_date}")
+        logger.info(f"レポート取得リクエスト: 日付={target_date}, 種別={report_type}")
         
         # 一時ディレクトリを作成
         temp_dir = tempfile.mkdtemp(prefix="rpp_report_")
@@ -334,17 +340,24 @@ async def get_rpp_report_csv(
                     detail=f"認証情報の取得に失敗しました: {str(e)}"
                 )
             
-            # RPPレポートを取得
-            csv_file_path = await fetch_rpp_report_csv(
-                rms_credentials=rms_credentials,
-                rakuten_credentials=rakuten_credentials,
-                target_date=target_date,
-                download_dir=download_dir,
-                headless=True
-            )
+            # レポートを取得
+            try:
+                csv_file_path = await fetch_rpp_report_csv(
+                    rms_credentials=rms_credentials,
+                    rakuten_credentials=rakuten_credentials,
+                    target_date=target_date,
+                    download_dir=download_dir,
+                    headless=True,
+                    report_type=report_type
+                )
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=str(e)
+                )
             
             # ファイル名を生成
-            filename = f"rpp_report_{date}.csv"
+            filename = f"{report_type}_report_{date}.csv"
             
             # 対象データがない場合は空のCSVファイルを返す
             if not csv_file_path or not os.path.exists(csv_file_path):

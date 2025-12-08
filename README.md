@@ -208,12 +208,19 @@ curl "http://localhost:8000/users/me" \
 
 ### GET /rpp-report
 
-指定された日付のRPPレポートCSVを取得します（認証が必要）。
+指定された日付のレポートCSVを取得します（認証が必要）。
 
 #### パラメータ
 
 - `date` (必須): 取得するレポートの日付 (YYYY-MM-DD形式)
   - 例: `2024-01-01`
+- `report_type` (任意): 取得するレポート種別
+  - `rpp`（デフォルト）: RPPレポート `https://ad.rms.rakuten.co.jp/rpp/reports`
+  - `rpp-exp` または `rppexp`: RPP-EXPレポート `https://ad.rms.rakuten.co.jp/rppexp/reports/`
+  - `cpnadv`: 運用型クーポン広告（クーポンアドバンス） `https://ad.rms.rakuten.co.jp/cpnadv/top`
+  - `tda`: ターゲティングディスプレイ広告（TDA） `https://ad.rms.rakuten.co.jp/tda/top`
+  - `tdaexp`: ターゲティングディスプレイ広告 -エクスパンション `https://ad.rms.rakuten.co.jp/tdaexp/top/`
+  - `cpa`: 効果保証型広告（楽天CPA広告） `https://ad.rms.rakuten.co.jp/cpa/reports`
 
 #### ヘッダー
 
@@ -232,10 +239,10 @@ TOKEN=$(curl -X POST "http://localhost:8000/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "username=admin&password=your_password" | jq -r '.access_token')
 
-# 2. トークンを使用してレポートを取得
-curl "http://localhost:8000/rpp-report?date=2024-01-01" \
+# 2. トークンを使用してレポートを取得（例: RPP-EXP）
+curl "http://localhost:8000/rpp-report?date=2024-01-01&report_type=rpp-exp" \
   -H "Authorization: Bearer $TOKEN" \
-  -o rpp_report_2024-01-01.csv
+  -o rpp-exp_report_2024-01-01.csv
 ```
 
 #### エラーレスポンス
